@@ -5,9 +5,9 @@ import (
 	"os"
 
 	"github.com/arc-language/core-builder/builder"
-	"github.com/arc-language/core-builder/ir"
 	"github.com/arc-language/core-builder/types"
-	"github.com/arc-language/core-codegen/codegen"
+	"github.com/arc-language/core-builder/ir"
+	"github.com/arc-language/core-codegen/codegen" 
 )
 
 func main() {
