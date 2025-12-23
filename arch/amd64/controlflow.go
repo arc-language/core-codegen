@@ -337,7 +337,6 @@ func (c *compiler) intCastOp(inst *ir.CastInst) error {
 	c.loadToReg(RAX, src)
 
 	srcSize := SizeOf(src.Type())
-	dstSize := SizeOf(inst.Type())
 
 	switch inst.Opcode() {
 	case ir.OpTrunc:
@@ -395,7 +394,6 @@ func (c *compiler) fpCastOp(inst *ir.CastInst) error {
 func (c *compiler) fpToIntOp(inst *ir.CastInst) error {
 	src := inst.Operands()[0]
 	srcType := src.Type().(*types.FloatType)
-	signed := inst.Opcode() == ir.OpFPToSI
 
 	c.loadToFpReg(0, src)
 
@@ -415,7 +413,6 @@ func (c *compiler) fpToIntOp(inst *ir.CastInst) error {
 func (c *compiler) intToFpOp(inst *ir.CastInst) error {
 	src := inst.Operands()[0]
 	dstType := inst.Type().(*types.FloatType)
-	signed := inst.Opcode() == ir.OpSIToFP
 
 	c.loadToReg(RAX, src)
 

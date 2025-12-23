@@ -238,10 +238,6 @@ func (c *compiler) allocaOp(inst *ir.AllocaInst) error {
 		}
 	}
 
-	// The address is: rbp - (currentFrame - allocaOffset)
-	// For simplicity, we compute lea rax, [rbp - offset]
-	offset := c.stackMap[inst] // This contains where we store the pointer
-
 	// We need to compute the actual allocation address
 	// Let's use a simple strategy: allocate at end of frame
 	allocOffset := -(c.currentFrame - size)

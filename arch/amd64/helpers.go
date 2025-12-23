@@ -1,8 +1,6 @@
 package amd64
 
 import (
-	"fmt"
-	"math"
 	"unsafe"
 
 	"github.com/arc-language/core-builder/ir"
