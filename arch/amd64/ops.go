@@ -11,9 +11,9 @@ func (c *compiler) compileInstruction(inst ir.Instruction) error {
 	switch inst.Opcode() {
 	// Arithmetic
 	case ir.OpAdd:
-		return c.binOp(inst, 0x01, false)
+		return c.addOp(inst)
 	case ir.OpSub:
-		return c.binOp(inst, 0x29, false)
+		return c.subOp(inst)
 	case ir.OpMul:
 		return c.mulOp(inst)
 	case ir.OpUDiv, ir.OpSDiv:
@@ -33,11 +33,11 @@ func (c *compiler) compileInstruction(inst ir.Instruction) error {
 
 	// Bitwise
 	case ir.OpAnd:
-		return c.binOp(inst, 0x21, false)
+		return c.andOp(inst)
 	case ir.OpOr:
-		return c.binOp(inst, 0x09, false)
+		return c.orOp(inst)
 	case ir.OpXor:
-		return c.binOp(inst, 0x31, false)
+		return c.xorOp(inst)
 	case ir.OpShl:
 		return c.shiftOp(inst, 4)
 	case ir.OpLShr:
@@ -100,36 +100,141 @@ func (c *compiler) compileInstruction(inst ir.Instruction) error {
 	}
 }
 
-// Binary operations (add, sub, and, or, xor)
-func (c *compiler) binOp(inst ir.Instruction, opcode byte, isImm bool) error {
+// Addition
+func (c *compiler) addOp(inst ir.Instruction) error {
 	ops := inst.Operands()
 	lhs := ops[0]
 	rhs := ops[1]
 
-	// Check if rhs is a constant
-	if constInt, ok := rhs.(*ir.ConstantInt); ok && constInt.Value >= -128 && constInt.Value <= 127 {
-		// Use immediate form
-		c.loadToReg(RAX, lhs)
+	c.loadToReg(RAX, lhs)
 
+	// Check if rhs is a constant
+	if constInt, ok := rhs.(*ir.ConstantInt); ok {
 		if constInt.Value >= -128 && constInt.Value <= 127 {
-			// 8-bit immediate
-			c.emitBytes(0x48, 0x83, 0xC0|opcode>>3, byte(constInt.Value))
+			// 8-bit immediate: add rax, imm8 (48 83 C0 ib)
+			c.emitBytes(0x48, 0x83, 0xC0, byte(constInt.Value))
 		} else {
-			// 32-bit immediate
-			c.emitBytes(0x48, 0x81, 0xC0|opcode>>3)
+			// 32-bit immediate: add rax, imm32 (48 81 C0 id)
+			c.emitBytes(0x48, 0x81, 0xC0)
 			c.emitInt32(int32(constInt.Value))
 		}
-
-		c.storeFromReg(RAX, inst)
-		return nil
+	} else {
+		// Register form: add rax, rcx
+		c.loadToReg(RCX, rhs)
+		c.emitBytes(0x48, 0x01, 0xC8)
 	}
 
-	// Register form
-	c.loadToReg(RAX, lhs)
-	c.loadToReg(RCX, rhs)
+	c.storeFromReg(RAX, inst)
+	return nil
+}
 
-	// REX.W + opcode + ModR/M (RAX, RCX)
-	c.emitBytes(0x48, opcode, 0xC8)
+// Subtraction
+func (c *compiler) subOp(inst ir.Instruction) error {
+	ops := inst.Operands()
+	lhs := ops[0]
+	rhs := ops[1]
+
+	c.loadToReg(RAX, lhs)
+
+	// Check if rhs is a constant
+	if constInt, ok := rhs.(*ir.ConstantInt); ok {
+		if constInt.Value >= -128 && constInt.Value <= 127 {
+			// 8-bit immediate: sub rax, imm8 (48 83 E8 ib)
+			c.emitBytes(0x48, 0x83, 0xE8, byte(constInt.Value))
+		} else {
+			// 32-bit immediate: sub rax, imm32 (48 81 E8 id)
+			c.emitBytes(0x48, 0x81, 0xE8)
+			c.emitInt32(int32(constInt.Value))
+		}
+	} else {
+		// Register form: sub rax, rcx
+		c.loadToReg(RCX, rhs)
+		c.emitBytes(0x48, 0x29, 0xC8)
+	}
+
+	c.storeFromReg(RAX, inst)
+	return nil
+}
+
+// AND operation
+func (c *compiler) andOp(inst ir.Instruction) error {
+	ops := inst.Operands()
+	lhs := ops[0]
+	rhs := ops[1]
+
+	c.loadToReg(RAX, lhs)
+
+	// Check if rhs is a constant
+	if constInt, ok := rhs.(*ir.ConstantInt); ok {
+		if constInt.Value >= -128 && constInt.Value <= 127 {
+			// 8-bit immediate: and rax, imm8 (48 83 E0 ib)
+			c.emitBytes(0x48, 0x83, 0xE0, byte(constInt.Value))
+		} else {
+			// 32-bit immediate: and rax, imm32 (48 81 E0 id)
+			c.emitBytes(0x48, 0x81, 0xE0)
+			c.emitInt32(int32(constInt.Value))
+		}
+	} else {
+		// Register form: and rax, rcx
+		c.loadToReg(RCX, rhs)
+		c.emitBytes(0x48, 0x21, 0xC8)
+	}
+
+	c.storeFromReg(RAX, inst)
+	return nil
+}
+
+// OR operation
+func (c *compiler) orOp(inst ir.Instruction) error {
+	ops := inst.Operands()
+	lhs := ops[0]
+	rhs := ops[1]
+
+	c.loadToReg(RAX, lhs)
+
+	// Check if rhs is a constant
+	if constInt, ok := rhs.(*ir.ConstantInt); ok {
+		if constInt.Value >= -128 && constInt.Value <= 127 {
+			// 8-bit immediate: or rax, imm8 (48 83 C8 ib)
+			c.emitBytes(0x48, 0x83, 0xC8, byte(constInt.Value))
+		} else {
+			// 32-bit immediate: or rax, imm32 (48 81 C8 id)
+			c.emitBytes(0x48, 0x81, 0xC8)
+			c.emitInt32(int32(constInt.Value))
+		}
+	} else {
+		// Register form: or rax, rcx
+		c.loadToReg(RCX, rhs)
+		c.emitBytes(0x48, 0x09, 0xC8)
+	}
+
+	c.storeFromReg(RAX, inst)
+	return nil
+}
+
+// XOR operation
+func (c *compiler) xorOp(inst ir.Instruction) error {
+	ops := inst.Operands()
+	lhs := ops[0]
+	rhs := ops[1]
+
+	c.loadToReg(RAX, lhs)
+
+	// Check if rhs is a constant
+	if constInt, ok := rhs.(*ir.ConstantInt); ok {
+		if constInt.Value >= -128 && constInt.Value <= 127 {
+			// 8-bit immediate: xor rax, imm8 (48 83 F0 ib)
+			c.emitBytes(0x48, 0x83, 0xF0, byte(constInt.Value))
+		} else {
+			// 32-bit immediate: xor rax, imm32 (48 81 F0 id)
+			c.emitBytes(0x48, 0x81, 0xF0)
+			c.emitInt32(int32(constInt.Value))
+		}
+	} else {
+		// Register form: xor rax, rcx
+		c.loadToReg(RCX, rhs)
+		c.emitBytes(0x48, 0x31, 0xC8)
+	}
 
 	c.storeFromReg(RAX, inst)
 	return nil
@@ -480,5 +585,3 @@ func (c *compiler) fcmpOp(inst *ir.FCmpInst) error {
 	c.storeFromReg(RAX, inst)
 	return nil
 }
-
-// Continue in next file...
