@@ -11,6 +11,19 @@ import (
 
 type Artifact struct {
 	TextBuffer  []byte
+	DataBuffer  []package amd64
+
+import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
+
+	"github.com/arc-language/core-builder/ir"
+	"github.com/arc-language/core-builder/types"
+)
+
+type Artifact struct {
+	TextBuffer  []byte
 	DataBuffer  []byte
 	Symbols     []SymbolDef
 	Relocations []Relocation
@@ -288,21 +301,19 @@ func (c *compiler) emitArgSave(fn *ir.Function) {
 	argRegs := []int{RDI, RSI, RDX, RCX, R8, R9}
 
 	for i, arg := range fn.Arguments {
+		offset := c.stackMap[arg]
+		size := SizeOf(arg.Type())
+
 		if i < len(argRegs) {
 			// Load from register and store to stack
 			reg := argRegs[i]
-			offset := c.stackMap[arg]
-
-			// Determine size
-			size := SizeOf(arg.Type())
 			if size <= 8 {
 				c.emitStoreReg(reg, offset, size)
 			}
 		} else {
 			// Arguments beyond 6 are on the caller's stack
-			// We need to copy them from [rbp + 16 + (i-6)*8] to our local stack
+			// They are at [rbp + 16 + (i-6)*8]
 			srcOffset := 16 + (i-6)*8
-			dstOffset := c.stackMap[arg]
 
 			// mov rax, [rbp + srcOffset]
 			c.emitBytes(0x48, 0x8B, 0x85)
@@ -310,7 +321,7 @@ func (c *compiler) emitArgSave(fn *ir.Function) {
 
 			// mov [rbp + dstOffset], rax
 			c.emitBytes(0x48, 0x89, 0x85)
-			c.emitInt32(int32(dstOffset))
+			c.emitInt32(int32(offset))
 		}
 	}
 }

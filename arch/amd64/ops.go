@@ -39,11 +39,11 @@ func (c *compiler) compileInstruction(inst ir.Instruction) error {
 	case ir.OpXor:
 		return c.xorOp(inst)
 	case ir.OpShl:
-		return c.shiftOp(inst, 4)
+		return c.shiftOp(inst, 0x00) // shl uses /4 -> 0xE0
 	case ir.OpLShr:
-		return c.shiftOp(inst, 5)
+		return c.shiftOp(inst, 0x08) // shr uses /5 -> 0xE8
 	case ir.OpAShr:
-		return c.shiftOp(inst, 7)
+		return c.shiftOp(inst, 0x18) // sar uses /7 -> 0xF8
 
 	// Memory
 	case ir.OpAlloca:
@@ -315,16 +315,16 @@ func (c *compiler) shiftOp(inst ir.Instruction, opext byte) error {
 	if constInt, ok := amount.(*ir.ConstantInt); ok {
 		// Immediate shift
 		if constInt.Value == 1 {
-			// Special encoding for shift by 1
-			c.emitBytes(0x48, 0xD1, 0xC0|opext)
+			// Special encoding for shift by 1: 48 D1 E0+opext
+			c.emitBytes(0x48, 0xD1, 0xE0|opext)
 		} else {
-			// Shift by immediate
-			c.emitBytes(0x48, 0xC1, 0xC0|opext, byte(constInt.Value))
+			// Shift by immediate: 48 C1 E0+opext imm8
+			c.emitBytes(0x48, 0xC1, 0xE0|opext, byte(constInt.Value))
 		}
 	} else {
-		// Variable shift (amount in CL)
+		// Variable shift (amount in CL): 48 D3 E0+opext
 		c.loadToReg(RCX, amount)
-		c.emitBytes(0x48, 0xD3, 0xC0|opext)
+		c.emitBytes(0x48, 0xD3, 0xE0|opext)
 	}
 
 	c.storeFromReg(RAX, inst)
