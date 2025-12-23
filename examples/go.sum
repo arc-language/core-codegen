@@ -2,3 +2,5 @@ github.com/arc-language/core-builder v0.0.0-20251222230544-91aac0849f4f h1:cqLay
 github.com/arc-language/core-builder v0.0.0-20251222230544-91aac0849f4f/go.mod h1:19aJJsZ3HkyQ3IBjxjhVjmeiThxFcPqvhP1YPFWqj+M=
 github.com/arc-language/core-codegen v0.0.0-20251223001941-0f5aacb35e8f h1:fEay4SeK8QzYLU72WfqysPyigCHWIsc7BD7++DWPkGQ=
 github.com/arc-language/core-codegen v0.0.0-20251223001941-0f5aacb35e8f/go.mod h1:BJOzpetHIOP54oXKCER1OuSuJRtg79tmgJQofV4YSx0=
+github.com/arc-language/core-codegen v0.0.0-20251223003913-4f667ab4b1c5 h1:gBAw13d7hgpIBIzT2bnnrkR/VJl8YIbHzWIEMnolXW0=
+github.com/arc-language/core-codegen v0.0.0-20251223003913-4f667ab4b1c5/go.mod h1:+PZFdeewFhSYo+OuOcwbQ06W61cMmVohZsctmIdpfVY=

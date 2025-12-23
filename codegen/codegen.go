@@ -78,7 +78,7 @@ func GenerateObject(m *ir.Module) ([]byte, error) {
 		// TODO: Could check function/global linkage from IR to determine
 		// if it should be local, weak, etc.
 
-		info := elf.MakeSymbolInfo(binding, symType)
+		info := elf.MakeSymbolInfo(byte(binding), symType)
 		elfSym := f.AddSymbol(sym.Name, info, section, sym.Offset, sym.Size)
 		symbolMap[sym.Name] = elfSym
 	}
@@ -107,7 +107,7 @@ func GenerateObject(m *ir.Module) ([]byte, error) {
 		// Add .rela.text section
 		relaSec := f.AddSection(".rela.text", elf.SHT_RELA, elf.SHF_ALLOC, relaBuf.Bytes())
 		relaSec.Link = uint32(len(f.Sections) - 1) // Link to .symtab (will be added later)
-		relaSec.Info = uint32(textSec.index)       // Applies to .text section
+		relaSec.Info = uint32(textSec.Index)       // Applies to .text section
 		relaSec.Entsize = 24                       // sizeof(Elf64_Rela)
 		relaSec.Addralign = 8
 	}
