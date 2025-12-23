@@ -154,37 +154,47 @@ func (c *compiler) emitXorReg(dst, src int) {
 
 // Emit load from stack: mov reg, [rbp + offset]
 func (c *compiler) emitLoadFromStack(reg int, offset int, size int) {
-	rex := byte(0x48)
 	regNum := reg
+	needsREX := false
+	rex := byte(0x40) // Base REX prefix
 	
 	if regNum >= 8 {
-		rex |= 0x04
+		rex |= 0x04 // REX.R bit
+		needsREX = true
 		regNum -= 8
 	}
 
 	switch size {
 	case 1:
 		// movzx reg, byte ptr [rbp + offset]
+		rex |= 0x08 // REX.W for 64-bit result
 		c.emitBytes(rex, 0x0F, 0xB6, byte(0x85|(regNum<<3)))
 		c.emitInt32(int32(offset))
 
 	case 2:
 		// movzx reg, word ptr [rbp + offset]
+		rex |= 0x08 // REX.W for 64-bit result
 		c.emitBytes(rex, 0x0F, 0xB7, byte(0x85|(regNum<<3)))
 		c.emitInt32(int32(offset))
 
 	case 4:
 		// mov r32, [rbp + offset] (zero-extends to 64)
-		c.emitBytes(byte(0x8B), byte(0x85|(regNum<<3)))
+		if needsREX {
+			c.emitBytes(rex, 0x8B, byte(0x85|(regNum<<3)))
+		} else {
+			c.emitBytes(0x8B, byte(0x85|(regNum<<3)))
+		}
 		c.emitInt32(int32(offset))
 
 	case 8:
 		// mov r64, [rbp + offset]
+		rex |= 0x08 // REX.W for 64-bit operand
 		c.emitBytes(rex, 0x8B, byte(0x85|(regNum<<3)))
 		c.emitInt32(int32(offset))
 
 	default:
 		// Fallback to 8-byte load
+		rex |= 0x08 // REX.W
 		c.emitBytes(rex, 0x8B, byte(0x85|(regNum<<3)))
 		c.emitInt32(int32(offset))
 	}
