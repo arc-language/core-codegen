@@ -302,13 +302,19 @@ func (c *compiler) emitArgSave(fn *ir.Function) {
 			// They are at [rbp + 16 + (i-6)*8]
 			srcOffset := 16 + (i-6)*8
 
-			// mov rax, [rbp + srcOffset]
-			c.emitBytes(0x48, 0x8B, 0x85)
-			c.emitInt32(int32(srcOffset))
+			// Load with appropriate size
+			if size == 4 {
+				// mov eax, [rbp + srcOffset]  (32-bit load, zero-extends)
+				c.emitBytes(0x8B, 0x85)
+				c.emitInt32(int32(srcOffset))
+			} else {
+				// mov rax, [rbp + srcOffset]
+				c.emitBytes(0x48, 0x8B, 0x85)
+				c.emitInt32(int32(srcOffset))
+			}
 
-			// mov [rbp + dstOffset], rax
-			c.emitBytes(0x48, 0x89, 0x85)
-			c.emitInt32(int32(offset))
+			// Store to local stack slot with appropriate size
+			c.emitStoreToStack(RAX, offset, size)
 		}
 	}
 }
