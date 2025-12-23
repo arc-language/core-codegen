@@ -137,86 +137,110 @@ func (c *compiler) loadConstFloat(xmmReg int, value float64, bits int) {
 // Emit XOR reg, reg
 func (c *compiler) emitXorReg(dst, src int) {
 	rex := byte(0x48)
-	if dst >= 8 {
+	dstReg := dst
+	srcReg := src
+	
+	if dstReg >= 8 {
 		rex |= 0x04
-		dst -= 8
+		dstReg -= 8
 	}
-	if src >= 8 {
+	if srcReg >= 8 {
 		rex |= 0x01
-		src -= 8
+		srcReg -= 8
 	}
 
-	c.emitBytes(rex, 0x31, byte(0xC0|(src<<3)|dst))
+	c.emitBytes(rex, 0x31, byte(0xC0|(srcReg<<3)|dstReg))
 }
 
 // Emit load from stack: mov reg, [rbp + offset]
 func (c *compiler) emitLoadFromStack(reg int, offset int, size int) {
 	rex := byte(0x48)
-	if reg >= 8 {
+	regNum := reg
+	
+	if regNum >= 8 {
 		rex |= 0x04
-		reg -= 8
+		regNum -= 8
 	}
 
 	switch size {
 	case 1:
 		// movzx reg, byte ptr [rbp + offset]
-		c.emitBytes(rex, 0x0F, 0xB6, byte(0x85|(reg<<3)))
+		c.emitBytes(rex, 0x0F, 0xB6, byte(0x85|(regNum<<3)))
 		c.emitInt32(int32(offset))
 
 	case 2:
 		// movzx reg, word ptr [rbp + offset]
-		c.emitBytes(rex, 0x0F, 0xB7, byte(0x85|(reg<<3)))
+		c.emitBytes(rex, 0x0F, 0xB7, byte(0x85|(regNum<<3)))
 		c.emitInt32(int32(offset))
 
 	case 4:
 		// mov r32, [rbp + offset] (zero-extends to 64)
-		c.emitBytes(byte(0x8B), byte(0x85|(reg<<3)))
+		c.emitBytes(byte(0x8B), byte(0x85|(regNum<<3)))
 		c.emitInt32(int32(offset))
 
 	case 8:
 		// mov r64, [rbp + offset]
-		c.emitBytes(rex, 0x8B, byte(0x85|(reg<<3)))
+		c.emitBytes(rex, 0x8B, byte(0x85|(regNum<<3)))
 		c.emitInt32(int32(offset))
 
 	default:
 		// Fallback to 8-byte load
-		c.emitBytes(rex, 0x8B, byte(0x85|(reg<<3)))
+		c.emitBytes(rex, 0x8B, byte(0x85|(regNum<<3)))
 		c.emitInt32(int32(offset))
 	}
 }
 
 // Emit store to stack: mov [rbp + offset], reg
 func (c *compiler) emitStoreToStack(reg int, offset int, size int) {
+	regNum := reg
+	needsREX := false
 	rex := byte(0x48)
-	if reg >= 8 {
+	
+	if regNum >= 8 {
 		rex |= 0x04
-		reg -= 8
+		needsREX = true
+		regNum -= 8
 	}
 
 	switch size {
 	case 1:
 		// mov byte ptr [rbp + offset], r8
-		c.emitBytes(0x88, byte(0x85|(reg<<3)))
+		if needsREX || reg >= 4 { // Need REX for spl, bpl, sil, dil or R8-R15
+			if !needsREX {
+				rex = 0x40
+			}
+			c.emitBytes(rex, 0x88, byte(0x85|(regNum<<3)))
+		} else {
+			c.emitBytes(0x88, byte(0x85|(regNum<<3)))
+		}
 		c.emitInt32(int32(offset))
 
 	case 2:
 		// mov word ptr [rbp + offset], r16
-		c.emitBytes(0x66, 0x89, byte(0x85|(reg<<3)))
+		if needsREX {
+			c.emitBytes(0x66, rex, 0x89, byte(0x85|(regNum<<3)))
+		} else {
+			c.emitBytes(0x66, 0x89, byte(0x85|(regNum<<3)))
+		}
 		c.emitInt32(int32(offset))
 
 	case 4:
 		// mov dword ptr [rbp + offset], r32
-		c.emitBytes(0x89, byte(0x85|(reg<<3)))
+		if needsREX {
+			c.emitBytes(rex, 0x89, byte(0x85|(regNum<<3)))
+		} else {
+			c.emitBytes(0x89, byte(0x85|(regNum<<3)))
+		}
 		c.emitInt32(int32(offset))
 
 	case 8:
 		// mov qword ptr [rbp + offset], r64
-		c.emitBytes(rex, 0x89, byte(0x85|(reg<<3)))
+		c.emitBytes(rex, 0x89, byte(0x85|(regNum<<3)))
 		c.emitInt32(int32(offset))
 
 	default:
 		// Fallback
-		c.emitBytes(rex, 0x89, byte(0x85|(reg<<3)))
+		c.emitBytes(rex, 0x89, byte(0x85|(regNum<<3)))
 		c.emitInt32(int32(offset))
 	}
 }
@@ -229,15 +253,17 @@ func (c *compiler) emitFpLoadFromStack(xmmReg int, offset int, isDouble bool) {
 	}
 
 	rex := byte(0)
-	if xmmReg >= 8 {
+	regNum := xmmReg
+	
+	if regNum >= 8 {
 		rex = 0x44
-		xmmReg -= 8
+		regNum -= 8
 	}
 
 	if rex != 0 {
-		c.emitBytes(prefix, rex, 0x0F, 0x10, byte(0x85|(xmmReg<<3)))
+		c.emitBytes(prefix, rex, 0x0F, 0x10, byte(0x85|(regNum<<3)))
 	} else {
-		c.emitBytes(prefix, 0x0F, 0x10, byte(0x85|(xmmReg<<3)))
+		c.emitBytes(prefix, 0x0F, 0x10, byte(0x85|(regNum<<3)))
 	}
 	c.emitInt32(int32(offset))
 }
@@ -250,15 +276,17 @@ func (c *compiler) emitFpStoreToStack(xmmReg int, offset int, isDouble bool) {
 	}
 
 	rex := byte(0)
-	if xmmReg >= 8 {
+	regNum := xmmReg
+	
+	if regNum >= 8 {
 		rex = 0x44
-		xmmReg -= 8
+		regNum -= 8
 	}
 
 	if rex != 0 {
-		c.emitBytes(prefix, rex, 0x0F, 0x11, byte(0x85|(xmmReg<<3)))
+		c.emitBytes(prefix, rex, 0x0F, 0x11, byte(0x85|(regNum<<3)))
 	} else {
-		c.emitBytes(prefix, 0x0F, 0x11, byte(0x85|(xmmReg<<3)))
+		c.emitBytes(prefix, 0x0F, 0x11, byte(0x85|(regNum<<3)))
 	}
 	c.emitInt32(int32(offset))
 }
@@ -266,13 +294,15 @@ func (c *compiler) emitFpStoreToStack(xmmReg int, offset int, isDouble bool) {
 // Emit LEA with RIP-relative addressing (for globals)
 func (c *compiler) emitLeaRipRelative(reg int, symbolName string) {
 	rex := byte(0x48)
-	if reg >= 8 {
+	regNum := reg
+	
+	if regNum >= 8 {
 		rex |= 0x04
-		reg -= 8
+		regNum -= 8
 	}
 
 	// lea reg, [rip + disp32]
-	c.emitBytes(rex, 0x8D, byte(0x05|(reg<<3)))
+	c.emitBytes(rex, 0x8D, byte(0x05|(regNum<<3)))
 
 	// Add relocation
 	c.relocations = append(c.relocations, Relocation{
@@ -288,50 +318,59 @@ func (c *compiler) emitLeaRipRelative(reg int, symbolName string) {
 func (c *compiler) emitMovdToXmm(xmmReg, gprReg int) {
 	// movd xmm, reg
 	rex := byte(0x48)
-	if xmmReg >= 8 {
+	xmmNum := xmmReg
+	gprNum := gprReg
+	
+	if xmmNum >= 8 {
 		rex |= 0x04
-		xmmReg -= 8
+		xmmNum -= 8
 	}
-	if gprReg >= 8 {
+	if gprNum >= 8 {
 		rex |= 0x01
-		gprReg -= 8
+		gprNum -= 8
 	}
 
-	c.emitBytes(0x66, rex, 0x0F, 0x6E, byte(0xC0|(xmmReg<<3)|gprReg))
+	c.emitBytes(0x66, rex, 0x0F, 0x6E, byte(0xC0|(xmmNum<<3)|gprNum))
 }
 
 // Move GPR to XMM (64-bit)
 func (c *compiler) emitMovqToXmm(xmmReg, gprReg int) {
 	// movq xmm, reg
 	rex := byte(0x48)
-	if xmmReg >= 8 {
+	xmmNum := xmmReg
+	gprNum := gprReg
+	
+	if xmmNum >= 8 {
 		rex |= 0x04
-		xmmReg -= 8
+		xmmNum -= 8
 	}
-	if gprReg >= 8 {
+	if gprNum >= 8 {
 		rex |= 0x01
-		gprReg -= 8
+		gprNum -= 8
 	}
 
-	c.emitBytes(0x66, rex, 0x0F, 0x6E, byte(0xC0|(xmmReg<<3)|gprReg))
+	c.emitBytes(0x66, rex, 0x0F, 0x6E, byte(0xC0|(xmmNum<<3)|gprNum))
 }
 
 // XOR XMM registers
 func (c *compiler) emitXorps(dst, src int) {
 	rex := byte(0)
-	if dst >= 8 {
+	dstNum := dst
+	srcNum := src
+	
+	if dstNum >= 8 {
 		rex |= 0x04
-		dst -= 8
+		dstNum -= 8
 	}
-	if src >= 8 {
+	if srcNum >= 8 {
 		rex |= 0x01
-		src -= 8
+		srcNum -= 8
 	}
 
 	if rex != 0 {
-		c.emitBytes(rex, 0x0F, 0x57, byte(0xC0|(dst<<3)|src))
+		c.emitBytes(rex, 0x0F, 0x57, byte(0xC0|(dstNum<<3)|srcNum))
 	} else {
-		c.emitBytes(0x0F, 0x57, byte(0xC0|(dst<<3)|src))
+		c.emitBytes(0x0F, 0x57, byte(0xC0|(dstNum<<3)|srcNum))
 	}
 }
 
