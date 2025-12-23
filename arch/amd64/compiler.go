@@ -10,9 +10,9 @@ import (
 )
 
 type Artifact struct {
-	TextBuffer []byte
-	DataBuffer []byte
-	Symbols    []SymbolDef
+	TextBuffer  []byte
+	DataBuffer  []byte
+	Symbols     []SymbolDef
 	Relocations []Relocation
 }
 
@@ -34,7 +34,7 @@ type Relocation struct {
 type RelocationType int
 
 const (
-	R_X86_64_PC32 RelocationType = 2
+	R_X86_64_PC32  RelocationType = 2
 	R_X86_64_PLT32 RelocationType = 4
 )
 
@@ -65,14 +65,19 @@ func Compile(m *ir.Module) (*Artifact, error) {
 
 	// Compile global variables first
 	for _, g := range m.Globals {
+		offset := c.data.Len()
+		
 		if err := c.compileGlobal(g); err != nil {
 			return nil, fmt.Errorf("in global %s: %w", g.Name(), err)
 		}
+		
+		size := c.data.Len() - offset
 		symbols = append(symbols, SymbolDef{
 			Name:     g.Name(),
-			Offset:   uint64(c.data.Len()),
-			Size:     uint64(SizeOf(g.Type())),
+			Offset:   uint64(offset),
+			Size:     uint64(size),
 			IsGlobal: true,
+			IsFunc:   false,
 		})
 	}
 
@@ -86,12 +91,15 @@ func Compile(m *ir.Module) (*Artifact, error) {
 		if err := c.compileFunction(fn); err != nil {
 			return nil, fmt.Errorf("in function %s: %w", fn.Name(), err)
 		}
+		
+		endOff := c.text.Len()
 
 		symbols = append(symbols, SymbolDef{
-			Name:   fn.Name(),
-			Offset: uint64(startOff),
-			Size:   uint64(c.text.Len() - startOff),
-			IsFunc: true,
+			Name:     fn.Name(),
+			Offset:   uint64(startOff),
+			Size:     uint64(endOff - startOff),
+			IsFunc:   true,
+			IsGlobal: false, // Will be determined by linkage
 		})
 	}
 

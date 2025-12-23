@@ -4,5 +4,5 @@ go 1.25.4
 
 require (
 	github.com/arc-language/core-builder v0.0.0-20251222230544-91aac0849f4f
-	github.com/arc-language/core-codegen v0.0.0-20251223010401-f636c7e43040
+	github.com/arc-language/core-codegen v0.0.0-20251223015731-28f074578b91
 )

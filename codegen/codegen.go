@@ -67,22 +67,25 @@ func GenerateObject(m *ir.Module) ([]byte, error) {
 	for _, sym := range artifact.Symbols {
 		var section *elf.Section
 		var symType byte
+		var binding byte
 
 		if sym.IsFunc {
 			section = textSec
 			symType = elf.STT_FUNC
+			// Functions are global by default (unless marked as internal/private in IR)
+			binding = elf.STB_GLOBAL
 		} else if sym.IsGlobal {
 			section = dataSec
 			symType = elf.STT_OBJECT
+			binding = elf.STB_GLOBAL
+		} else {
+			// Local data symbol
+			section = dataSec
+			symType = elf.STT_OBJECT
+			binding = elf.STB_LOCAL
 		}
 
-		// Determine binding (local vs global)
-		binding := elf.STB_GLOBAL // Default to global export
-		
-		// TODO: Could check function/global linkage from IR to determine
-		// if it should be local, weak, etc.
-
-		info := elf.MakeSymbolInfo(byte(binding), symType)
+		info := elf.MakeSymbolInfo(binding, symType)
 		elfSym := f.AddSymbol(sym.Name, info, section, sym.Offset, sym.Size)
 		symbolMap[sym.Name] = elfSym
 	}
