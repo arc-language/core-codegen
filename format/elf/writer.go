@@ -227,21 +227,13 @@ func (f *File) AddRelocation(section *Section, offset uint64, symbol *Symbol, re
 
 // WriteTo writes the complete ELF file
 func (f *File) WriteTo(w io.Writer) error {
-	// 1. Build string tables
-	for _, sec := range f.Sections {
-		sec.nameIdx = f.ShStrTab.Add(sec.Name)
-	}
-
-	for _, sym := range f.Symbols {
-		sym.nameIdx = f.StrTab.Add(sym.Name)
-	}
-
-	// 2. Add string table sections
-	f.AddSection(".shstrtab", SHT_STRTAB, 0, f.ShStrTab.Data)
-	strTabSec := f.AddSection(".strtab", SHT_STRTAB, 0, f.StrTab.Data)
+	// 1. Add string table sections FIRST (before building string tables)
+	// We need to know their indices before we can reference them
+	shstrtabSec := f.AddSection(".shstrtab", SHT_STRTAB, 0, nil) // Content will be set later
+	strTabSec := f.AddSection(".strtab", SHT_STRTAB, 0, nil)     // Content will be set later
 	strTabSec.Addralign = 1
 
-	// 3. Build symbol table
+	// 2. Build symbol table
 	symBuf := new(bytes.Buffer)
 
 	// First symbol is always null
@@ -276,10 +268,25 @@ func (f *File) WriteTo(w io.Writer) error {
 	symTabSec.Addralign = 8
 	symTabSec.Entsize = 24 // sizeof(Elf64_Sym)
 
-	// 4. Fix up relocation section links to point to symtab
+	// 3. Fix up relocation section links to point to symtab
 	for _, relaSec := range f.RelaSections {
 		relaSec.Link = uint32(symTabSec.Index)
 	}
+
+	// 4. NOW build string tables (after all sections and symbols are added)
+	for _, sec := range f.Sections {
+		sec.nameIdx = f.ShStrTab.Add(sec.Name)
+	}
+
+	for _, sym := range f.Symbols {
+		sym.nameIdx = f.StrTab.Add(sym.Name)
+	}
+
+	// Set the actual content for string table sections
+	shstrtabSec.Content = f.ShStrTab.Data
+	shstrtabSec.size = uint64(len(f.ShStrTab.Data))
+	strTabSec.Content = f.StrTab.Data
+	strTabSec.size = uint64(len(f.StrTab.Data))
 
 	// 5. Calculate section offsets
 	headerSize := uint64(64) // sizeof(Elf64_Ehdr)
@@ -294,14 +301,16 @@ func (f *File) WriteTo(w io.Writer) error {
 		}
 
 		sec.offset = currentOffset
-		sec.size = uint64(len(sec.Content))
+		if sec.size == 0 {
+			sec.size = uint64(len(sec.Content))
+		}
 		currentOffset += sec.size
 	}
 
 	shdrOffset := currentOffset
 
-	// 6. Write ELF header
-	if err := f.writeElfHeader(w, shdrOffset); err != nil {
+	// 6. Write ELF header (with correct shstrndx)
+	if err := f.writeElfHeader(w, shdrOffset, shstrtabSec.Index); err != nil {
 		return err
 	}
 
@@ -333,7 +342,7 @@ func (f *File) WriteTo(w io.Writer) error {
 	return nil
 }
 
-func (f *File) writeElfHeader(w io.Writer, shoff uint64) error {
+func (f *File) writeElfHeader(w io.Writer, shoff uint64, shstrndx uint16) error {
 	var hdr elfHeader
 
 	// Magic number
@@ -353,7 +362,7 @@ func (f *File) writeElfHeader(w io.Writer, shoff uint64) error {
 	hdr.Ehsize = 64                        // sizeof(Elf64_Ehdr)
 	hdr.Shentsize = 64                     // sizeof(Elf64_Shdr)
 	hdr.Shnum = uint16(len(f.Sections))
-	hdr.Shstrndx = uint16(len(f.Sections) - 2) // .shstrtab is second-to-last
+	hdr.Shstrndx = shstrndx
 
 	return binary.Write(w, binary.LittleEndian, hdr)
 }
