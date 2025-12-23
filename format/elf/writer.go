@@ -133,6 +133,7 @@ type Symbol struct {
 
 	// Internal
 	nameIdx uint32
+	symIdx  int // Index in final symbol table
 }
 
 // Relocation represents a relocation entry
@@ -213,6 +214,7 @@ func (f *File) AddSymbol(name string, info byte, section *Section, value, size u
 		Section: section,
 		Value:   value,
 		Size:    size,
+		symIdx:  -1, // Will be set when writing
 	}
 
 	f.Symbols = append(f.Symbols, sym)
@@ -233,32 +235,37 @@ func (f *File) WriteTo(w io.Writer) error {
 	strTabSec := f.AddSection(".strtab", SHT_STRTAB, 0, nil)     // Content will be set later
 	strTabSec.Addralign = 1
 
-	// 2. Build symbol table
+	// 2. Build symbol table with correct ordering
 	symBuf := new(bytes.Buffer)
+	orderedSymbols := make([]*Symbol, 0, len(f.Symbols)+1)
 
 	// First symbol is always null
-	f.writeSymbol(symBuf, &Symbol{})
+	nullSym := &Symbol{}
+	f.writeSymbol(symBuf, nullSym)
+	orderedSymbols = append(orderedSymbols, nullSym)
 
 	// Track first global symbol index
 	firstGlobal := 1
-	localCount := 0
 
 	// Write local symbols first
 	for _, sym := range f.Symbols {
 		binding := sym.Info >> 4
 		if binding == STB_LOCAL {
+			sym.symIdx = len(orderedSymbols)
 			f.writeSymbol(symBuf, sym)
-			localCount++
+			orderedSymbols = append(orderedSymbols, sym)
 		}
 	}
 
-	firstGlobal = localCount + 1
+	firstGlobal = len(orderedSymbols)
 
 	// Write global symbols
 	for _, sym := range f.Symbols {
 		binding := sym.Info >> 4
 		if binding != STB_LOCAL {
+			sym.symIdx = len(orderedSymbols)
 			f.writeSymbol(symBuf, sym)
+			orderedSymbols = append(orderedSymbols, sym)
 		}
 	}
 
