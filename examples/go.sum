@@ -28,3 +28,5 @@ github.com/arc-language/core-codegen v0.0.0-20251223193113-6d8548f28a9a h1:MsE8L
 github.com/arc-language/core-codegen v0.0.0-20251223193113-6d8548f28a9a/go.mod h1:+PZFdeewFhSYo+OuOcwbQ06W61cMmVohZsctmIdpfVY=
 github.com/arc-language/core-codegen v0.0.0-20251223193219-0092d8074ea0 h1:6IvntOBvXds98DnzEv6fc/4GN8gaW82lmykF7ZWhvao=
 github.com/arc-language/core-codegen v0.0.0-20251223193219-0092d8074ea0/go.mod h1:+PZFdeewFhSYo+OuOcwbQ06W61cMmVohZsctmIdpfVY=
+github.com/arc-language/core-codegen v0.0.0-20251223193431-be593c029584 h1:Ol2vpmuTgO2OQyaacknU0OvGILcPOaILWUOB/pvWQeo=
+github.com/arc-language/core-codegen v0.0.0-20251223193431-be593c029584/go.mod h1:+PZFdeewFhSYo+OuOcwbQ06W61cMmVohZsctmIdpfVY=

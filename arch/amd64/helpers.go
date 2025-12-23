@@ -194,10 +194,10 @@ func (c *compiler) emitLoadFromStack(reg int, offset int, size int) {
 func (c *compiler) emitStoreToStack(reg int, offset int, size int) {
 	regNum := reg
 	needsREX := false
-	rex := byte(0x48)
+	rex := byte(0x40) // Base REX prefix
 	
 	if regNum >= 8 {
-		rex |= 0x04
+		rex |= 0x04 // REX.R bit
 		needsREX = true
 		regNum -= 8
 	}
@@ -206,9 +206,6 @@ func (c *compiler) emitStoreToStack(reg int, offset int, size int) {
 	case 1:
 		// mov byte ptr [rbp + offset], r8
 		if needsREX || reg >= 4 { // Need REX for spl, bpl, sil, dil or R8-R15
-			if !needsREX {
-				rex = 0x40
-			}
 			c.emitBytes(rex, 0x88, byte(0x85|(regNum<<3)))
 		} else {
 			c.emitBytes(0x88, byte(0x85|(regNum<<3)))
@@ -225,8 +222,9 @@ func (c *compiler) emitStoreToStack(reg int, offset int, size int) {
 		c.emitInt32(int32(offset))
 
 	case 4:
-		// mov dword ptr [rbp + offset], r32
+		// mov dword ptr [rbp + offset], r32d
 		if needsREX {
+			// For R8-R15, we still need REX but NOT REX.W (which would make it 64-bit)
 			c.emitBytes(rex, 0x89, byte(0x85|(regNum<<3)))
 		} else {
 			c.emitBytes(0x89, byte(0x85|(regNum<<3)))
@@ -235,11 +233,13 @@ func (c *compiler) emitStoreToStack(reg int, offset int, size int) {
 
 	case 8:
 		// mov qword ptr [rbp + offset], r64
+		rex |= 0x08 // REX.W bit for 64-bit operand
 		c.emitBytes(rex, 0x89, byte(0x85|(regNum<<3)))
 		c.emitInt32(int32(offset))
 
 	default:
-		// Fallback
+		// Fallback to 8-byte
+		rex |= 0x08 // REX.W bit
 		c.emitBytes(rex, 0x89, byte(0x85|(regNum<<3)))
 		c.emitInt32(int32(offset))
 	}
