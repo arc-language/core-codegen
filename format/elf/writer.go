@@ -50,6 +50,7 @@ const (
 	SHF_EXECINSTR = 0x4
 	SHF_MERGE     = 0x10
 	SHF_STRINGS   = 0x20
+	SHF_INFO_LINK = 0x40
 
 	// Symbol binding
 	STB_LOCAL  = 0
@@ -93,12 +94,13 @@ const (
 
 // File represents an ELF object file
 type File struct {
-	Sections   []*Section
-	Symbols    []*Symbol
-	StrTab     *StringTable
-	ShStrTab   *StringTable
-	DataLayout string
-	Machine    uint16
+	Sections     []*Section
+	Symbols      []*Symbol
+	StrTab       *StringTable
+	ShStrTab     *StringTable
+	DataLayout   string
+	Machine      uint16
+	RelaSections []*Section // Track rela sections for link fixup
 }
 
 // Section represents an ELF section
@@ -274,7 +276,12 @@ func (f *File) WriteTo(w io.Writer) error {
 	symTabSec.Addralign = 8
 	symTabSec.Entsize = 24 // sizeof(Elf64_Sym)
 
-	// 4. Calculate section offsets
+	// 4. Fix up relocation section links to point to symtab
+	for _, relaSec := range f.RelaSections {
+		relaSec.Link = uint32(symTabSec.Index)
+	}
+
+	// 5. Calculate section offsets
 	headerSize := uint64(64) // sizeof(Elf64_Ehdr)
 	currentOffset := headerSize
 
@@ -293,12 +300,12 @@ func (f *File) WriteTo(w io.Writer) error {
 
 	shdrOffset := currentOffset
 
-	// 5. Write ELF header
+	// 6. Write ELF header
 	if err := f.writeElfHeader(w, shdrOffset); err != nil {
 		return err
 	}
 
-	// 6. Write section contents
+	// 7. Write section contents
 	written := headerSize
 	for _, sec := range f.Sections {
 		// Add padding if needed
@@ -316,7 +323,7 @@ func (f *File) WriteTo(w io.Writer) error {
 		written += sec.size
 	}
 
-	// 7. Write section headers
+	// 8. Write section headers
 	for _, sec := range f.Sections {
 		if err := f.writeSectionHeader(w, sec); err != nil {
 			return err

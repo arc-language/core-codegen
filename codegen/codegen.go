@@ -42,7 +42,11 @@ func GenerateObject(m *ir.Module) ([]byte, error) {
 	// 6. Add .rodata section for read-only data (if needed)
 	// Could separate string literals and constants here
 
-	// 7. Build symbol table
+	// 7. Add .note.GNU-stack section (prevents executable stack warning)
+	stackSec := f.AddSection(".note.GNU-stack", elf.SHT_PROGBITS, 0, []byte{})
+	stackSec.Addralign = 1
+
+	// 8. Build symbol table
 	// Add file symbol
 	f.AddSymbol(m.Name, elf.MakeSymbolInfo(elf.STB_LOCAL, elf.STT_FILE), nil, 0, 0)
 
@@ -83,7 +87,7 @@ func GenerateObject(m *ir.Module) ([]byte, error) {
 		symbolMap[sym.Name] = elfSym
 	}
 
-	// 8. Add relocations
+	// 9. Add relocations
 	if len(artifact.Relocations) > 0 {
 		relaBuf := new(bytes.Buffer)
 
@@ -97,7 +101,8 @@ func GenerateObject(m *ir.Module) ([]byte, error) {
 				symbolMap[rel.SymbolName] = sym
 			}
 
-			// Find symbol index
+			// Find symbol index in the final symbol table
+			// We need to account for the null symbol at index 0
 			symIdx := findSymbolIndex(f.Symbols, sym)
 
 			// Write Elf64_Rela entry
@@ -105,14 +110,17 @@ func GenerateObject(m *ir.Module) ([]byte, error) {
 		}
 
 		// Add .rela.text section
-		relaSec := f.AddSection(".rela.text", elf.SHT_RELA, elf.SHF_ALLOC, relaBuf.Bytes())
-		relaSec.Link = uint32(len(f.Sections) - 1) // Link to .symtab (will be added later)
-		relaSec.Info = uint32(textSec.Index)       // Applies to .text section
-		relaSec.Entsize = 24                       // sizeof(Elf64_Rela)
+		relaSec := f.AddSection(".rela.text", elf.SHT_RELA, elf.SHF_INFO_LINK, relaBuf.Bytes())
+		relaSec.Link = 0      // Will be set to .symtab index after it's created
+		relaSec.Info = uint32(textSec.Index)  // Applies to .text section
+		relaSec.Entsize = 24  // sizeof(Elf64_Rela)
 		relaSec.Addralign = 8
+		
+		// Store rela section for later link update
+		f.RelaSections = append(f.RelaSections, relaSec)
 	}
 
-	// 9. Write to buffer
+	// 10. Write to buffer
 	buf := new(bytes.Buffer)
 	if err := f.WriteTo(buf); err != nil {
 		return nil, fmt.Errorf("ELF generation failed: %w", err)
