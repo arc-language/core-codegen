@@ -32,7 +32,7 @@ func (c *compiler) retOp(inst *ir.RetInst) error {
 // Unconditional branch
 func (c *compiler) brOp(inst *ir.BrInst) error {
 	// Handle phi nodes in target block before branching
-	c.handlePhiForBranch(inst.Parent, inst.Target)
+	c.handlePhiForBranch(inst.Parent(), inst.Target)
 	
 	// jmp rel32
 	c.emitBytes(0xE9)
@@ -52,50 +52,13 @@ func (c *compiler) condBrOp(inst *ir.CondBrInst) error {
 	// test rax, rax
 	c.emitBytes(0x48, 0x85, 0xC0)
 
-	// We need to handle phi nodes for each branch
-	// Save current position for true branch phi handling
-	truePhiStart := c.text.Len()
-	
-	// jnz trueBlock (jump if not zero)
-	c.emitBytes(0x0F, 0x85)
-	c.fixups = append(c.fixups, jumpFixup{
-		offset: c.text.Len(),
-		target: inst.TrueBlock,
-	})
-	c.emitUint32(0) // Placeholder
-
-	// Handle phi for false branch (falls through)
-	c.handlePhiForBranch(inst.Parent, inst.FalseBlock)
-	
-	// jmp falseBlock
-	c.emitBytes(0xE9)
-	c.fixups = append(c.fixups, jumpFixup{
-		offset: c.text.Len(),
-		target: inst.FalseBlock,
-	})
-	c.emitUint32(0) // Placeholder
-
-	// Now insert phi handling for true branch
-	// We need to do this BEFORE the jnz, so we'll need to restructure
-	// For now, let's use a trampoline approach
-	
-	return nil
-}
-
-// Better approach: rewrite condBrOp to handle phi correctly
-func (c *compiler) condBrOpNew(inst *ir.CondBrInst) error {
-	c.loadToReg(RAX, inst.Condition)
-
-	// test rax, rax
-	c.emitBytes(0x48, 0x85, 0xC0)
-
 	// jz false_phi_handler
 	c.emitBytes(0x0F, 0x84)
 	falsePhiJump := c.text.Len()
 	c.emitUint32(0) // Placeholder
 
 	// True branch: handle phi then jump
-	c.handlePhiForBranch(inst.Parent, inst.TrueBlock)
+	c.handlePhiForBranch(inst.Parent(), inst.TrueBlock)
 	c.emitBytes(0xE9)
 	c.fixups = append(c.fixups, jumpFixup{
 		offset: c.text.Len(),
@@ -105,7 +68,7 @@ func (c *compiler) condBrOpNew(inst *ir.CondBrInst) error {
 
 	// False branch phi handler
 	falsePhiStart := c.text.Len()
-	c.handlePhiForBranch(inst.Parent, inst.FalseBlock)
+	c.handlePhiForBranch(inst.Parent(), inst.FalseBlock)
 	c.emitBytes(0xE9)
 	c.fixups = append(c.fixups, jumpFixup{
 		offset: c.text.Len(),
@@ -148,7 +111,7 @@ func (c *compiler) switchOp(inst *ir.SwitchInst) error {
 	}
 
 	// Jump to default block
-	c.handlePhiForBranch(inst.Parent, inst.DefaultBlock)
+	c.handlePhiForBranch(inst.Parent(), inst.DefaultBlock)
 	c.emitBytes(0xE9)
 	c.fixups = append(c.fixups, jumpFixup{
 		offset: c.text.Len(),
@@ -169,7 +132,7 @@ func (c *compiler) handlePhiForBranch(fromBlock, toBlock *ir.BasicBlock) {
 		}
 		
 		// Find the incoming value from fromBlock
-		for _, incoming := range phi.Incomings {
+		for _, incoming := range phi.Incoming {
 			if incoming.Block == fromBlock {
 				// Copy the value to phi's location
 				c.loadToReg(RAX, incoming.Value)
