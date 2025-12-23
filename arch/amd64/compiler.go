@@ -11,19 +11,6 @@ import (
 
 type Artifact struct {
 	TextBuffer  []byte
-	DataBuffer  []package amd64
-
-import (
-	"bytes"
-	"encoding/binary"
-	"fmt"
-
-	"github.com/arc-language/core-builder/ir"
-	"github.com/arc-language/core-builder/types"
-)
-
-type Artifact struct {
-	TextBuffer  []byte
 	DataBuffer  []byte
 	Symbols     []SymbolDef
 	Relocations []Relocation
