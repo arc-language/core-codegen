@@ -235,7 +235,12 @@ func (f *File) WriteTo(w io.Writer) error {
 	strTabSec := f.AddSection(".strtab", SHT_STRTAB, 0, nil)     // Content will be set later
 	strTabSec.Addralign = 1
 
-	// 2. Build symbol table with correct ordering
+	// 2. Build string tables for symbols FIRST
+	for _, sym := range f.Symbols {
+		sym.nameIdx = f.StrTab.Add(sym.Name)
+	}
+
+	// 3. Build symbol table with correct ordering
 	symBuf := new(bytes.Buffer)
 	orderedSymbols := make([]*Symbol, 0, len(f.Symbols)+1)
 
@@ -275,18 +280,14 @@ func (f *File) WriteTo(w io.Writer) error {
 	symTabSec.Addralign = 8
 	symTabSec.Entsize = 24 // sizeof(Elf64_Sym)
 
-	// 3. Fix up relocation section links to point to symtab
+	// 4. Fix up relocation section links to point to symtab
 	for _, relaSec := range f.RelaSections {
 		relaSec.Link = uint32(symTabSec.Index)
 	}
 
-	// 4. NOW build string tables (after all sections and symbols are added)
+	// 5. Build section name string table
 	for _, sec := range f.Sections {
 		sec.nameIdx = f.ShStrTab.Add(sec.Name)
-	}
-
-	for _, sym := range f.Symbols {
-		sym.nameIdx = f.StrTab.Add(sym.Name)
 	}
 
 	// Set the actual content for string table sections
@@ -295,7 +296,7 @@ func (f *File) WriteTo(w io.Writer) error {
 	strTabSec.Content = f.StrTab.Data
 	strTabSec.size = uint64(len(f.StrTab.Data))
 
-	// 5. Calculate section offsets
+	// 6. Calculate section offsets
 	headerSize := uint64(64) // sizeof(Elf64_Ehdr)
 	currentOffset := headerSize
 
@@ -316,12 +317,12 @@ func (f *File) WriteTo(w io.Writer) error {
 
 	shdrOffset := currentOffset
 
-	// 6. Write ELF header (with correct shstrndx)
+	// 7. Write ELF header (with correct shstrndx)
 	if err := f.writeElfHeader(w, shdrOffset, shstrtabSec.Index); err != nil {
 		return err
 	}
 
-	// 7. Write section contents
+	// 8. Write section contents
 	written := headerSize
 	for _, sec := range f.Sections {
 		// Add padding if needed
@@ -339,7 +340,7 @@ func (f *File) WriteTo(w io.Writer) error {
 		written += sec.size
 	}
 
-	// 8. Write section headers
+	// 9. Write section headers
 	for _, sec := range f.Sections {
 		if err := f.writeSectionHeader(w, sec); err != nil {
 			return err
