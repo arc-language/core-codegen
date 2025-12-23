@@ -299,22 +299,43 @@ func (c *compiler) emitArgSave(fn *ir.Function) {
 			}
 		} else {
 			// Arguments beyond 6 are on the caller's stack
-			// They are at [rbp + 16 + (i-6)*8]
-			srcOffset := 16 + (i-6)*8
+			// Stack layout after prologue: [rbp+0]=old rbp, [rbp+8]=return addr
+			// The caller may have added alignment padding before the call
+			// With 1 stack arg (8 bytes), alignment adds 8 bytes
+			// So: [rbp+16]=padding, [rbp+24]=first stack arg, [rbp+32]=second stack arg, etc.
+			
+			// Calculate number of stack args to determine if there's padding
+			numStackArgs := len(fn.Arguments) - len(argRegs)
+			stackBytesBeforeAlign := numStackArgs * 8
+			alignmentPadding := 0
+			if stackBytesBeforeAlign%16 != 0 {
+				alignmentPadding = 8
+			}
+			
+			srcOffset := 16 + alignmentPadding + (i-len(argRegs))*8
 
 			// Load with appropriate size
 			if size == 4 {
-				// mov eax, [rbp + srcOffset]  (32-bit load, zero-extends)
+				// mov eax, [rbp + srcOffset]
 				c.emitBytes(0x8B, 0x85)
 				c.emitInt32(int32(srcOffset))
-			} else {
+				
+				// mov [rbp + dstOffset], eax
+				c.emitBytes(0x89, 0x85)
+				c.emitInt32(int32(offset))
+			} else if size == 8 {
 				// mov rax, [rbp + srcOffset]
 				c.emitBytes(0x48, 0x8B, 0x85)
 				c.emitInt32(int32(srcOffset))
+				
+				// mov [rbp + dstOffset], rax
+				c.emitBytes(0x48, 0x89, 0x85)
+				c.emitInt32(int32(offset))
+			} else {
+				// For other sizes, use RAX as intermediate
+				c.emitLoadFromStack(RAX, srcOffset, size)
+				c.emitStoreToStack(RAX, offset, size)
 			}
-
-			// Store to local stack slot with appropriate size
-			c.emitStoreToStack(RAX, offset, size)
 		}
 	}
 }
