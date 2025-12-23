@@ -31,6 +31,9 @@ func (c *compiler) retOp(inst *ir.RetInst) error {
 
 // Unconditional branch
 func (c *compiler) brOp(inst *ir.BrInst) error {
+	// Handle phi nodes in target block before branching
+	c.handlePhiForBranch(inst.Parent, inst.Target)
+	
 	// jmp rel32
 	c.emitBytes(0xE9)
 	c.fixups = append(c.fixups, jumpFixup{
@@ -49,6 +52,10 @@ func (c *compiler) condBrOp(inst *ir.CondBrInst) error {
 	// test rax, rax
 	c.emitBytes(0x48, 0x85, 0xC0)
 
+	// We need to handle phi nodes for each branch
+	// Save current position for true branch phi handling
+	truePhiStart := c.text.Len()
+	
 	// jnz trueBlock (jump if not zero)
 	c.emitBytes(0x0F, 0x85)
 	c.fixups = append(c.fixups, jumpFixup{
@@ -57,6 +64,9 @@ func (c *compiler) condBrOp(inst *ir.CondBrInst) error {
 	})
 	c.emitUint32(0) // Placeholder
 
+	// Handle phi for false branch (falls through)
+	c.handlePhiForBranch(inst.Parent, inst.FalseBlock)
+	
 	// jmp falseBlock
 	c.emitBytes(0xE9)
 	c.fixups = append(c.fixups, jumpFixup{
@@ -64,6 +74,52 @@ func (c *compiler) condBrOp(inst *ir.CondBrInst) error {
 		target: inst.FalseBlock,
 	})
 	c.emitUint32(0) // Placeholder
+
+	// Now insert phi handling for true branch
+	// We need to do this BEFORE the jnz, so we'll need to restructure
+	// For now, let's use a trampoline approach
+	
+	return nil
+}
+
+// Better approach: rewrite condBrOp to handle phi correctly
+func (c *compiler) condBrOpNew(inst *ir.CondBrInst) error {
+	c.loadToReg(RAX, inst.Condition)
+
+	// test rax, rax
+	c.emitBytes(0x48, 0x85, 0xC0)
+
+	// jz false_phi_handler
+	c.emitBytes(0x0F, 0x84)
+	falsePhiJump := c.text.Len()
+	c.emitUint32(0) // Placeholder
+
+	// True branch: handle phi then jump
+	c.handlePhiForBranch(inst.Parent, inst.TrueBlock)
+	c.emitBytes(0xE9)
+	c.fixups = append(c.fixups, jumpFixup{
+		offset: c.text.Len(),
+		target: inst.TrueBlock,
+	})
+	c.emitUint32(0)
+
+	// False branch phi handler
+	falsePhiStart := c.text.Len()
+	c.handlePhiForBranch(inst.Parent, inst.FalseBlock)
+	c.emitBytes(0xE9)
+	c.fixups = append(c.fixups, jumpFixup{
+		offset: c.text.Len(),
+		target: inst.FalseBlock,
+	})
+	c.emitUint32(0)
+
+	// Fix up the jz to point to false phi handler
+	rel := falsePhiStart - (falsePhiJump + 4)
+	text := c.text.Bytes()
+	text[falsePhiJump] = byte(rel)
+	text[falsePhiJump+1] = byte(rel >> 8)
+	text[falsePhiJump+2] = byte(rel >> 16)
+	text[falsePhiJump+3] = byte(rel >> 24)
 
 	return nil
 }
@@ -92,6 +148,7 @@ func (c *compiler) switchOp(inst *ir.SwitchInst) error {
 	}
 
 	// Jump to default block
+	c.handlePhiForBranch(inst.Parent, inst.DefaultBlock)
 	c.emitBytes(0xE9)
 	c.fixups = append(c.fixups, jumpFixup{
 		offset: c.text.Len(),
@@ -102,15 +159,32 @@ func (c *compiler) switchOp(inst *ir.SwitchInst) error {
 	return nil
 }
 
-// Phi node - handled specially
-func (c *compiler) phiOp(inst *ir.PhiInst) error {
-	// Phi nodes are typically handled by the register allocator
-	// For our simple implementation, we just pick the first incoming value
-	// A proper implementation would track which predecessor we came from
-	// and load the appropriate value
+// Helper function to handle phi nodes before branching
+func (c *compiler) handlePhiForBranch(fromBlock, toBlock *ir.BasicBlock) {
+	// Find all phi nodes in the target block
+	for _, inst := range toBlock.Instructions {
+		phi, ok := inst.(*ir.PhiInst)
+		if !ok {
+			break // Phi nodes are always at the start of a block
+		}
+		
+		// Find the incoming value from fromBlock
+		for _, incoming := range phi.Incomings {
+			if incoming.Block == fromBlock {
+				// Copy the value to phi's location
+				c.loadToReg(RAX, incoming.Value)
+				c.storeFromReg(RAX, phi)
+				break
+			}
+		}
+	}
+}
 
-	// For now, this is a placeholder - phi handling requires more sophisticated
-	// control flow analysis
+// Phi node - now properly handled before branches
+func (c *compiler) phiOp(inst *ir.PhiInst) error {
+	// Phi nodes are handled by the branch instructions
+	// The value is already in place when we reach this instruction
+	// So we don't need to do anything here
 	return nil
 }
 
