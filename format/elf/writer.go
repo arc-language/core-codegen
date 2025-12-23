@@ -114,7 +114,7 @@ type Section struct {
 	Content   []byte
 
 	// Internal
-	index    uint16
+	Index    uint16
 	nameIdx  uint32
 	offset   uint64
 	size     uint64
@@ -195,7 +195,7 @@ func (f *File) AddSection(name string, typ uint32, flags uint64, content []byte)
 		Type:    typ,
 		Flags:   flags,
 		Content: content,
-		index:   uint16(len(f.Sections)),
+		Index:   uint16(len(f.Sections)),
 	}
 
 	f.Sections = append(f.Sections, s)
@@ -269,7 +269,7 @@ func (f *File) WriteTo(w io.Writer) error {
 	}
 
 	symTabSec := f.AddSection(".symtab", SHT_SYMTAB, 0, symBuf.Bytes())
-	symTabSec.Link = uint32(strTabSec.index)
+	symTabSec.Link = uint32(strTabSec.Index)
 	symTabSec.Info = uint32(firstGlobal) // Index of first global symbol
 	symTabSec.Addralign = 8
 	symTabSec.Entsize = 24 // sizeof(Elf64_Sym)
@@ -371,7 +371,7 @@ func (f *File) writeSectionHeader(w io.Writer, sec *Section) error {
 func (f *File) writeSymbol(w io.Writer, sym *Symbol) error {
 	shndx := uint16(SHN_UNDEF)
 	if sym.Section != nil {
-		shndx = sym.Section.index
+		shndx = sym.Section.Index
 	}
 
 	// Write in correct order for Elf64_Sym
