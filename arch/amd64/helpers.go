@@ -166,15 +166,23 @@ func (c *compiler) emitLoadFromStack(reg int, offset int, size int) {
 
 	switch size {
 	case 1:
-		// movzx reg, byte ptr [rbp + offset]
-		rex |= 0x08 // REX.W for 64-bit result
-		c.emitBytes(rex, 0x0F, 0xB6, byte(0x85|(regNum<<3)))
+		// movzx r32, byte ptr [rbp + offset] (zero-extends to 64)
+		// We avoid REX.W to keep encoding standard for movzbl
+		if needsREX {
+			c.emitBytes(rex, 0x0F, 0xB6, byte(0x85|(regNum<<3)))
+		} else {
+			c.emitBytes(0x0F, 0xB6, byte(0x85|(regNum<<3)))
+		}
 		c.emitInt32(int32(offset))
 
 	case 2:
-		// movzx reg, word ptr [rbp + offset]
-		rex |= 0x08 // REX.W for 64-bit result
-		c.emitBytes(rex, 0x0F, 0xB7, byte(0x85|(regNum<<3)))
+		// movzx r32, word ptr [rbp + offset] (zero-extends to 64)
+		// We avoid REX.W to keep encoding standard for movzwl
+		if needsREX {
+			c.emitBytes(rex, 0x0F, 0xB7, byte(0x85|(regNum<<3)))
+		} else {
+			c.emitBytes(0x0F, 0xB7, byte(0x85|(regNum<<3)))
+		}
 		c.emitInt32(int32(offset))
 
 	case 4:
