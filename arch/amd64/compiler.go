@@ -65,6 +65,11 @@ func Compile(m *ir.Module) (*Artifact, error) {
 
 	// Compile global variables first
 	for _, g := range m.Globals {
+		// Align to 8 bytes
+		for c.data.Len()%8 != 0 {
+			c.data.WriteByte(0)
+		}
+
 		offset := c.data.Len()
 		
 		if err := c.compileGlobal(g); err != nil {
@@ -112,11 +117,6 @@ func Compile(m *ir.Module) (*Artifact, error) {
 }
 
 func (c *compiler) compileGlobal(g *ir.Global) error {
-	// Align to 8 bytes
-	for c.data.Len()%8 != 0 {
-		c.data.WriteByte(0)
-	}
-
 	if g.Initializer == nil {
 		// Zero-initialized
 		size := SizeOf(g.Type())
