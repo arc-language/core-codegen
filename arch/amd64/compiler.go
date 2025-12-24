@@ -43,6 +43,7 @@ type compiler struct {
 	data         *bytes.Buffer
 	currentFunc  *ir.Function
 	stackMap     map[ir.Value]int // Value -> RBP offset (negative)
+	allocaOffsets map[*ir.AllocaInst]int // AllocaInst -> RBP offset (negative)
 	blockOffsets map[*ir.BasicBlock]int
 	fixups       []jumpFixup
 	relocations  []Relocation
@@ -180,6 +181,7 @@ func (c *compiler) emitConstant(constant ir.Constant) error {
 func (c *compiler) compileFunction(fn *ir.Function) error {
 	c.currentFunc = fn
 	c.stackMap = make(map[ir.Value]int)
+	c.allocaOffsets = make(map[*ir.AllocaInst]int)
 	c.blockOffsets = make(map[*ir.BasicBlock]int)
 	c.fixups = nil
 	c.nextTemp = 0
@@ -233,8 +235,10 @@ func (c *compiler) compileFunction(fn *ir.Function) error {
 					size = 8
 				}
 				allocaOffset += size
-				// The alloca instruction itself stores the address
-				// We'll generate code to compute this address
+				// Store the negative offset from RBP
+				// For a block of size N ending at -X, the address is RBP-X
+				// (Assuming stack grows down and we use 'lea' to get the base)
+				c.allocaOffsets[allocaInst] = -allocaOffset
 			}
 		}
 	}
