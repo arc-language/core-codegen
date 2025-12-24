@@ -333,21 +333,13 @@ func (c *compiler) shiftOp(inst ir.Instruction, opext byte) error {
 
 // Alloca - stack allocation
 func (c *compiler) allocaOp(inst *ir.AllocaInst) error {
-	// Calculate size
-	size := SizeOf(inst.AllocatedType)
-	if inst.NumElements != nil {
-		if constInt, ok := inst.NumElements.(*ir.ConstantInt); ok {
-			size *= int(constInt.Value)
-		} else {
-			return fmt.Errorf("dynamic alloca not supported")
-		}
+	// Retrieve pre-calculated offset
+	allocOffset, ok := c.allocaOffsets[inst]
+	if !ok {
+		return fmt.Errorf("unknown alloca instruction")
 	}
 
-	// We need to compute the actual allocation address
-	// Let's use a simple strategy: allocate at end of frame
-	allocOffset := -(c.currentFrame - size)
-
-	// lea rax, [rbp + allocOffset]
+	// lea rax, [rbp + allocOffset] (allocOffset is negative)
 	c.emitBytes(0x48, 0x8D, 0x85)
 	c.emitInt32(int32(allocOffset))
 
