@@ -90,6 +90,8 @@ func (c *compiler) compileInstruction(inst ir.Instruction) error {
 		return c.selectOp(inst.(*ir.SelectInst))
 	case ir.OpCall:
 		return c.callOp(inst.(*ir.CallInst))
+	case ir.OpSyscall:
+		return c.syscallOp(inst.(*ir.SyscallInst))
 	case ir.OpExtractValue:
 		return c.extractValueOp(inst.(*ir.ExtractValueInst))
 	case ir.OpInsertValue:
@@ -575,5 +577,43 @@ func (c *compiler) fcmpOp(inst *ir.FCmpInst) error {
 	c.emitBytes(0x48, 0x0F, 0xB6, 0xC0) // movzx rax, al
 
 	c.storeFromReg(RAX, inst)
+	return nil
+}
+
+// System Call (Linux x86_64)
+func (c *compiler) syscallOp(inst *ir.SyscallInst) error {
+	ops := inst.Operands()
+	if len(ops) == 0 {
+		return fmt.Errorf("syscall requires at least a syscall number")
+	}
+
+	// Linux x86_64 Syscall Calling Convention
+	// Syscall Number: RAX
+	// Args: RDI, RSI, RDX, R10, R8, R9
+	// Return: RAX
+	
+	// Registers in order for arguments 1..6
+	argRegs := []int{RDI, RSI, RDX, R10, R8, R9}
+
+	// 1. Load Syscall Number into RAX (ops[0])
+	c.loadToReg(RAX, ops[0])
+
+	// 2. Load Arguments into specific registers
+	// Note: args start at ops[1]
+	for i, arg := range ops[1:] {
+		if i >= len(argRegs) {
+			return fmt.Errorf("too many arguments for syscall (max 6 supported)")
+		}
+		c.loadToReg(argRegs[i], arg)
+	}
+
+	// 3. Emit 'syscall' instruction
+	// Opcode: 0F 05
+	c.emitBytes(0x0F, 0x05)
+
+	// 4. Store result (RAX) to stack slot allocated for this instruction
+	// This captures the return value of the syscall
+	c.storeFromReg(RAX, inst)
+
 	return nil
 }
