@@ -52,12 +52,15 @@ func (c *compiler) condBrOp(inst *ir.CondBrInst) error {
 	// test rax, rax
 	c.emitBytes(0x48, 0x85, 0xC0)
 
-	// jz false_phi_handler
+	// jz false_block (jump to false block if zero)
 	c.emitBytes(0x0F, 0x84)
-	falsePhiJump := c.text.Len()
+	c.fixups = append(c.fixups, jumpFixup{
+		offset: c.text.Len(),
+		target: inst.FalseBlock,
+	})
 	c.emitUint32(0) // Placeholder
 
-	// True branch: handle phi then jump
+	// True path falls through - handle phi and jump to true block
 	c.handlePhiForBranch(inst.Parent(), inst.TrueBlock)
 	c.emitBytes(0xE9)
 	c.fixups = append(c.fixups, jumpFixup{
@@ -66,23 +69,8 @@ func (c *compiler) condBrOp(inst *ir.CondBrInst) error {
 	})
 	c.emitUint32(0)
 
-	// False branch phi handler
-	falsePhiStart := c.text.Len()
-	c.handlePhiForBranch(inst.Parent(), inst.FalseBlock)
-	c.emitBytes(0xE9)
-	c.fixups = append(c.fixups, jumpFixup{
-		offset: c.text.Len(),
-		target: inst.FalseBlock,
-	})
-	c.emitUint32(0)
-
-	// Fix up the jz to point to false phi handler
-	rel := falsePhiStart - (falsePhiJump + 4)
-	text := c.text.Bytes()
-	text[falsePhiJump] = byte(rel)
-	text[falsePhiJump+1] = byte(rel >> 8)
-	text[falsePhiJump+2] = byte(rel >> 16)
-	text[falsePhiJump+3] = byte(rel >> 24)
+	// Note: No false path handling here - the jz above jumps directly to FalseBlock
+	// If FalseBlock has phi nodes, they should be handled at the start of that block
 
 	return nil
 }
